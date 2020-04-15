@@ -14,9 +14,21 @@ _Noreturn void icmp_echo_loop(char *address) {
 
 void icmp_send_echo(char *address) {
     printf("Pinging %s\n", address);
+    // TODO open raw socket
+    // 
     // TODO send ICMP echo request
+
     // TODO calculate packet loss
+
     // TODO calculate RTT
+}
+
+void icmp_fill_packet(struct icmphdr *packet) {
+    packet->type = ICMP_ECHO;
+    packet->code = 0;
+    packet->checksum = 0; // TODO proper checksum
+    packet->un.echo.id = 12345;
+    packet->un.echo.sequence = 0;
 }
 
 void icmp_convert_to_ip(char *address) {

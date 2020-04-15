@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
 
 void icmp_convert_to_ip(char *address);
 void icmp_send_echo(char *address);
