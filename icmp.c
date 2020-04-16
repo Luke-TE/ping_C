@@ -6,19 +6,32 @@ void icmp_ping(char *address) {
 }
 
 _Noreturn void icmp_echo_loop(char *address) {
+    int skt = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+
+    // TODO factor this out
+    struct sockaddr_in ping_address;
+    ping_address.sin_addr.s_addr = inet_addr(address);
+    ping_address.sin_port = htons(0); // TODO rewrite
+    ping_address.sin_family = AF_INET;
+
     while (1) {
-        icmp_send_echo(address);
+        icmp_send_echo(skt, &ping_address);
         icmp_time_delay(3);
     }
-}
-
-void icmp_send_echo(char *address) {
-    printf("Pinging %s\n", address);
-    // TODO open raw socket
-    // 
-    // TODO send ICMP echo request
 
     // TODO calculate packet loss
+}
+
+void icmp_send_echo(int skt, struct sockaddr_in *ping_address) {
+    struct icmphdr packet;
+    struct sockaddr_in *return_address;
+    icmp_fill_packet(&packet);
+
+    // TODO add checks to these
+    printf("sending\n");
+    sendto(skt, &packet, sizeof(packet), 0, (const struct sockaddr *) ping_address, sizeof(*ping_address));
+    printf("receiving\n");
+    recvfrom(skt, &packet, sizeof(packet), 0, (struct sockaddr *) return_address, sizeof(*return_address));
 
     // TODO calculate RTT
 }
