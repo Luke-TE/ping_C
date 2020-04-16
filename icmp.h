@@ -2,11 +2,13 @@
 #define PING_ICMP_H
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include "lib/checksum.h"
 
 void icmp_convert_to_ip(char *address);
 void icmp_send_echo(int skt, struct sockaddr_in *ping_address);

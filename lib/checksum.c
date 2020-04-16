@@ -23,7 +23,7 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 
-#include "netutils/checksum.h"
+#include "checksum.h"
 
 /* function: ip_checksum_add
  * adds data to a checksum. only known to work on little-endian hosts
