@@ -28,10 +28,16 @@ void icmp_send_echo(int skt, struct sockaddr_in *ping_address) {
     icmp_fill_packet(&packet);
 
     // TODO add checks to these
-    printf("sending\n");
-    sendto(skt, &packet, sizeof(packet), 0, (const struct sockaddr *) ping_address, sizeof(*ping_address));
-    printf("receiving\n");
-    recvfrom(skt, &packet, sizeof(packet), 0, (struct sockaddr *) return_address, sizeof(*return_address));
+    if (sendto(skt, &packet, sizeof(packet), 0, (const struct sockaddr *) ping_address, sizeof(*ping_address)) <= 0) {
+        printf("sending failed\n");
+    } else {
+        printf("sending successful\n");
+    }
+    if ( recvfrom(skt, &packet, sizeof(packet), 0, (struct sockaddr *) return_address, sizeof(*return_address)) <= 0) {
+        printf("receiving failed\n");
+    } else {
+        printf("receiving successful\n");
+    }
 
     // TODO calculate RTT
 }
