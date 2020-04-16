@@ -26,8 +26,7 @@ void icmp_send_echo(int skt, struct sockaddr_in *ping_address) {
     struct icmphdr packet;
     struct sockaddr_in *return_address;
     icmp_fill_packet(&packet);
-
-    // TODO add checks to these
+    
     if (sendto(skt, &packet, sizeof(packet), 0, (const struct sockaddr *) ping_address, sizeof(*ping_address)) <= 0) {
         printf("sending failed\n");
     } else {
