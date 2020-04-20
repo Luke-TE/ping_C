@@ -23,6 +23,11 @@ struct echo_status {
     bool received;
 };
 
+struct echo_reply {
+    struct ip ip_layer;
+    struct icmphdr icmp_layer;
+};
+
 void icmp_convert_to_ip(char *address);
 struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq);
 void icmp_skt_addr_init(const char *address, struct sockaddr_in *ping_address);
