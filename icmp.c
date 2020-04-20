@@ -7,6 +7,8 @@ void icmp_ping(char *address) {
 
 _Noreturn void icmp_echo_loop(char *address) {
     int skt = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    int seq_id = 1;
+    int packets_sent = 0, packets_received = 0;
 
     // TODO factor this out
     struct sockaddr_in ping_address;
@@ -14,23 +16,42 @@ _Noreturn void icmp_echo_loop(char *address) {
     ping_address.sin_port = htons(0);
     ping_address.sin_family = AF_INET;
 
-    while (1) {
-        icmp_send_echo(skt, &ping_address);
-        icmp_time_delay(3);
-    }
+    struct echo_status current_status;
 
-    // TODO calculate packet loss
+    while (1) {
+        current_status = icmp_send_echo(skt, &ping_address, seq_id);
+
+        if (current_status.sent) {
+            packets_sent++;
+        }
+
+        if (current_status.received) {
+            packets_received++;
+        }
+
+        if (packets_sent > 0) {
+            printf("packets sent: %d\n", packets_sent);
+            printf("packets received: %d\n", packets_received);
+            printf("packet loss: %f\n", (double) (packets_sent - packets_received) * 100 / packets_sent);
+        }
+
+        icmp_time_delay(3);
+        seq_id++;
+    }
 }
 
-void icmp_send_echo(int skt, struct sockaddr_in *ping_address) {
+struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq) {
+    bool sent = false, received = false;
     struct icmphdr packet;
-    icmp_fill_packet(&packet);
+    icmp_fill_packet(&packet, seq);
     struct sockaddr_in return_address;
+
 
     if (sendto(skt, &packet, sizeof(packet), 0, (const struct sockaddr *) ping_address, sizeof(*ping_address)) <= 0) {
         printf("sending failed\n");
     } else {
         printf("sending successful\n");
+        sent = true;
     }
 
     int return_address_len = sizeof(return_address);
@@ -38,17 +59,25 @@ void icmp_send_echo(int skt, struct sockaddr_in *ping_address) {
         printf("receiving failed\n");
     } else {
         printf("receiving successful\n");
+        received = true;
     }
 
-    // TODO calculate RTT
+    return (struct echo_status){sent, received};
 }
 
-void icmp_fill_packet(struct icmphdr *packet) {
+void icmp_fill_packet(struct icmphdr *packet, int seq) {
+    // ICMP Echo Request
     packet->type = ICMP_ECHO;
     packet->code = 0;
+
+    // Ping Process ID
+    packet->un.echo.id = htons(getpid());
+
+    // Increasing Sequence ID
+    packet->un.echo.sequence = htons(seq);
+
+    // IPv4 Checksum
     packet->checksum = 0;
-    packet->un.echo.id = 12345;
-    packet->un.echo.sequence = 0;
     packet->checksum = ip_checksum(packet, sizeof(*packet));
 }
 
