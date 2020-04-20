@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
+#include <netdb.h>
 
 #define INITIAL_SEQ_ID 1
 #define PING_DELAY 1
@@ -30,7 +31,7 @@ struct echo_reply {
 
 struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq);
 void icmp_skt_addr_init(const char *address, struct sockaddr_in *ping_address);
-void icmp_ping(char *address);
+void icmp_ping(char *hostname);
 
 _Noreturn void icmp_echo_loop(char *address);
 

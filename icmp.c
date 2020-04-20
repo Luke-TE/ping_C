@@ -1,13 +1,13 @@
 #include "icmp.h"
 
 void handle_dest_unreach(int code);
-void convert_to_ip(char *address);
+char *convert_to_ip(char *hostname);
 void set_echo_hdr(struct icmphdr *packet, int seq);
 void time_delay(int seconds);
 
-void icmp_ping(char *address) {
-    convert_to_ip(address);
-    icmp_echo_loop(address);
+void icmp_ping(char *hostname) {
+    char *ip_addr = convert_to_ip(hostname);
+    icmp_echo_loop(ip_addr);
 }
 
 // TODO Add TTL argument
@@ -115,9 +115,17 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
     return (struct echo_status) {sent, received};
 }
 
-void convert_to_ip(char *address) {
-    printf("converting to ip\n");
-    // TODO Convert Hostnames to IP addresses
+char *convert_to_ip(char *hostname) {
+    struct hostent *host = gethostbyname(hostname);
+    struct in_addr **addr_list = (struct in_addr **) host->h_addr_list;
+
+    if (addr_list[0] != NULL) {
+        printf("Converted to IP address. \n");
+        return inet_ntoa(*addr_list[0]);
+    }
+
+    // Unable to convert to IP address
+    return hostname;
 }
 
 void icmp_skt_addr_init(const char *address, struct sockaddr_in *ping_address) {
