@@ -1,23 +1,29 @@
 #include "icmp.h"
 
-void handle_dest_unreach(int code);
+void handle_dest_unreachable(int code);
+void handle_time_exceeded(int code);
 char *convert_to_ip(char *hostname);
 void set_echo_hdr(struct icmphdr *packet, int seq);
 void time_delay(int seconds);
 
-void icmp_ping(char *hostname) {
+void icmp_ping(char *hostname, int *time_to_live) {
     char *ip_addr = convert_to_ip(hostname);
-    icmp_echo_loop(ip_addr);
+    icmp_echo_loop(ip_addr, time_to_live);
 }
 
-// TODO Add TTL argument
-_Noreturn void icmp_echo_loop(char *address) {
+_Noreturn void icmp_echo_loop(char *address, int *time_to_live) {
     int seq_id = INITIAL_SEQ_ID;
     int packets_sent = 0, packets_received = 0;
     double packet_loss;
 
     // Initialize socket
     int skt = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+
+    // Set TTL, if provided
+    if (time_to_live != NULL) {
+        printf("Time To Live set to %d. \n", *time_to_live);
+        setsockopt(skt, IPPROTO_IP, IP_TTL, time_to_live, sizeof(*time_to_live));
+    }
 
     // Initialize address to ping
     struct sockaddr_in ping_address;
@@ -26,6 +32,7 @@ _Noreturn void icmp_echo_loop(char *address) {
     struct echo_status current_status;
 
     while (true) {
+
         // Ping the address
         current_status = icmp_send_echo(skt, &ping_address, seq_id);
 
@@ -88,18 +95,23 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
         // Interpret the response type
         switch (echo_reply_packet.icmp_layer.type) {
             case ICMP_ECHOREPLY: {
-                printf("Receiving reply successful. \n");
+                printf("Receiving reply successful. ");
                 received = true;
             }
                 break;
             case ICMP_DEST_UNREACH:
-                printf("Destination unreachable. \n");
-                handle_dest_unreach(echo_reply_packet.icmp_layer.code);
+                printf("Destination unreachable. ");
+                handle_dest_unreachable(echo_reply_packet.icmp_layer.code);
+                break;
+            case ICMP_TIME_EXCEEDED:
+                printf("Time exceeded. ");
+                handle_time_exceeded(echo_reply_packet.icmp_layer.code);
                 break;
             default:
-                printf("Message type %d, code %d. \n", echo_reply_packet.icmp_layer.type,
+                printf("Error Message with type %d, code %d. ", echo_reply_packet.icmp_layer.type,
                        echo_reply_packet.icmp_layer.code);
         }
+        printf("\n");
 
         char *address_pinged = inet_ntoa((struct in_addr) {received_address.sin_addr.s_addr});
         printf("Return address was %s:%d\n", address_pinged, received_address.sin_port);
@@ -158,7 +170,7 @@ void time_delay(int seconds) {
     while (time(0) < stop_time);
 }
 
-void handle_dest_unreach(int code) {
+void handle_dest_unreachable(int code) {
     // Print type of destination unreachable error
     switch (code) {
         case ICMP_NET_UNREACH:
@@ -169,6 +181,20 @@ void handle_dest_unreach(int code) {
             break;
         case ICMP_PROT_UNREACH:
             printf("Protocol was unreachable.\n");
+            break;
+        default:
+            printf("Code %d occurred.\n", code);
+    }
+}
+
+void handle_time_exceeded(int code) {
+    // Print type of time exceeded error
+    switch (code) {
+        case ICMP_EXC_TTL:
+            printf("TTL count exceeded.\n");
+            break;
+        case ICMP_EXC_FRAGTIME:
+            printf("Fragment Reass time exceeded.\n");
             break;
         default:
             printf("Code %d occurred.\n", code);
