@@ -1,12 +1,16 @@
 #include "icmp.h"
 
 void handle_dest_unreach(int code);
+void convert_to_ip(char *address);
+void set_echo_hdr(struct icmphdr *packet, int seq);
+void time_delay(int seconds);
 
 void icmp_ping(char *address) {
-    icmp_convert_to_ip(address);
+    convert_to_ip(address);
     icmp_echo_loop(address);
 }
 
+// TODO Add TTL argument
 _Noreturn void icmp_echo_loop(char *address) {
     int seq_id = INITIAL_SEQ_ID;
     int packets_sent = 0, packets_received = 0;
@@ -44,7 +48,7 @@ _Noreturn void icmp_echo_loop(char *address) {
         printf("Packet loss: %.2f%%, ", packet_loss);
         printf("\n\n");
 
-        icmp_time_delay(PING_DELAY);
+        time_delay(PING_DELAY);
         seq_id++;
     }
 }
@@ -55,7 +59,7 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
 
     // Set the ICMP request's header to be a echo request
     struct icmphdr echo_req_packet;
-    icmp_set_echo_hdr(&echo_req_packet, seq);
+    set_echo_hdr(&echo_req_packet, seq);
 
     struct echo_reply echo_reply_packet;
 
@@ -111,7 +115,7 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
     return (struct echo_status) {sent, received};
 }
 
-void icmp_convert_to_ip(char *address) {
+void convert_to_ip(char *address) {
     printf("converting to ip\n");
     // TODO Convert Hostnames to IP addresses
 }
@@ -123,7 +127,7 @@ void icmp_skt_addr_init(const char *address, struct sockaddr_in *ping_address) {
     ping_address->sin_family = AF_INET;
 }
 
-void icmp_set_echo_hdr(struct icmphdr *packet, int seq) {
+void set_echo_hdr(struct icmphdr *packet, int seq) {
     // ICMP Echo Request
     packet->type = ICMP_ECHO;
     packet->code = 0;
@@ -139,7 +143,7 @@ void icmp_set_echo_hdr(struct icmphdr *packet, int seq) {
     packet->checksum = ip_checksum(packet, sizeof(*packet));
 }
 
-void icmp_time_delay(int seconds) {
+void time_delay(int seconds) {
     time_t stop_time = time(0) + seconds;
 
     // Busy wait until time has passed

@@ -28,12 +28,9 @@ struct echo_reply {
     struct icmphdr icmp_layer;
 };
 
-void icmp_convert_to_ip(char *address);
 struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq);
 void icmp_skt_addr_init(const char *address, struct sockaddr_in *ping_address);
-void icmp_time_delay(int seconds);
 void icmp_ping(char *address);
-void icmp_set_echo_hdr(struct icmphdr *packet, int seq);
 
 _Noreturn void icmp_echo_loop(char *address);
 
