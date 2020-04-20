@@ -2,12 +2,14 @@
 
 void handle_dest_unreachable(int code);
 void handle_time_exceeded(int code);
-char *convert_to_ip(char *hostname);
+char *try_convert_to_ip(char *hostname);
 void set_echo_hdr(struct icmphdr *packet, int seq);
 void time_delay(int seconds);
+bool handle_reception(struct echo_reply *echo_reply_packet, bool *received);
+
 
 void icmp_ping(char *hostname, int *time_to_live) {
-    char *ip_addr = convert_to_ip(hostname);
+    char *ip_addr = try_convert_to_ip(hostname);
     icmp_echo_loop(ip_addr, time_to_live);
 }
 
@@ -31,8 +33,8 @@ _Noreturn void icmp_echo_loop(char *address, int *time_to_live) {
 
     struct echo_status current_status;
 
+    // Endless echo loop
     while (true) {
-
         // Ping the address
         current_status = icmp_send_echo(skt, &ping_address, seq_id);
 
@@ -60,13 +62,13 @@ _Noreturn void icmp_echo_loop(char *address, int *time_to_live) {
     }
 }
 
-struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq) {
+struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq_id) {
     bool sent = false, received = false;
     struct timespec rtt_start, rtt_end;
 
-    // Set the ICMP request's header to be a echo request
+    // Set the ICMP request's header to be an echo request
     struct icmphdr echo_req_packet;
-    set_echo_hdr(&echo_req_packet, seq);
+    set_echo_hdr(&echo_req_packet, seq_id);
 
     struct echo_reply echo_reply_packet;
 
@@ -76,6 +78,7 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
     if (sendto(skt, &echo_req_packet, sizeof(echo_req_packet), NO_COMM_FLAGS, (const struct sockaddr *) ping_address,
                sizeof(*ping_address)) <= 0) {
         printf("Sending request failed. \n");
+        return (struct echo_status) {sent, received};
     } else {
         printf("Sending request successful. \n");
         sent = true;
@@ -85,6 +88,7 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
     struct sockaddr_in received_address;
     int return_address_len = sizeof(received_address);
 
+
     printf("Receiving request... ");
     ssize_t num_bytes_recv = recvfrom(skt, &echo_reply_packet, sizeof(echo_reply_packet), NO_COMM_FLAGS,
                                       (struct sockaddr *) &received_address, (socklen_t *) &return_address_len);
@@ -92,34 +96,18 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
     if (num_bytes_recv <= 0) {
         printf("Receiving reply failed. \n");
     } else {
-        // Interpret the response type
-        switch (echo_reply_packet.icmp_layer.type) {
-            case ICMP_ECHOREPLY: {
-                printf("Receiving reply successful. ");
-                received = true;
-            }
-                break;
-            case ICMP_DEST_UNREACH:
-                printf("Destination unreachable. ");
-                handle_dest_unreachable(echo_reply_packet.icmp_layer.code);
-                break;
-            case ICMP_TIME_EXCEEDED:
-                printf("Time exceeded. ");
-                handle_time_exceeded(echo_reply_packet.icmp_layer.code);
-                break;
-            default:
-                printf("Error Message with type %d, code %d. ", echo_reply_packet.icmp_layer.type,
-                       echo_reply_packet.icmp_layer.code);
-        }
+        received = handle_reception(&echo_reply_packet, &received);
         printf("\n");
 
+        // Get actual IP address communicated with
         char *address_pinged = inet_ntoa((struct in_addr) {received_address.sin_addr.s_addr});
         printf("Return address was %s:%d\n", address_pinged, received_address.sin_port);
     }
 
+
     // Calculate and display round trip time
-    long double rtt = (double) (rtt_end.tv_sec - rtt_start.tv_sec) * 1000 +
-                      (double) (rtt_end.tv_nsec - rtt_start.tv_nsec) / 1000000;
+    long double rtt = (double) (rtt_end.tv_sec - rtt_start.tv_sec) * MS_IN_S +
+                      (double) (rtt_end.tv_nsec - rtt_start.tv_nsec) / NS_IN_MS;
     printf("Round-trip time %.2Lf ms \n", rtt);
 
 
@@ -127,7 +115,31 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
     return (struct echo_status) {sent, received};
 }
 
-char *convert_to_ip(char *hostname) {
+bool handle_reception(struct echo_reply *echo_reply_packet, bool *received) {
+    // Reception of echo successful, interpret the response type
+    switch (echo_reply_packet->icmp_layer.type) {
+        case ICMP_ECHOREPLY: {
+            printf("Receiving reply successful. ");
+            *received = true;
+        }
+            break;
+        case ICMP_DEST_UNREACH:
+            printf("Destination unreachable. ");
+            handle_dest_unreachable((*echo_reply_packet).icmp_layer.code);
+            break;
+        case ICMP_TIME_EXCEEDED:
+            printf("Time exceeded. ");
+            handle_time_exceeded((*echo_reply_packet).icmp_layer.code);
+            break;
+        default:
+            printf("Error Message with type %d, code %d. ", (*echo_reply_packet).icmp_layer.type,
+                   (*echo_reply_packet).icmp_layer.code);
+    }
+    return received;
+}
+
+char *try_convert_to_ip(char *hostname) {
+    // Try to convert hostname tp IP address if possible
     struct hostent *host = gethostbyname(hostname);
     struct in_addr **addr_list = (struct in_addr **) host->h_addr_list;
 

@@ -18,6 +18,8 @@
 #define INITIAL_SEQ_ID 1
 #define PING_DELAY 1
 #define NO_COMM_FLAGS 0
+#define NS_IN_MS 1000000
+#define MS_IN_S 1000
 
 struct echo_status {
     bool sent;
@@ -29,7 +31,7 @@ struct echo_reply {
     struct icmphdr icmp_layer;
 };
 
-struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq);
+struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq_id);
 void icmp_skt_addr_init(const char *address, struct sockaddr_in *ping_address);
 void icmp_ping(char *hostname, int *time_to_live);
 _Noreturn void icmp_echo_loop(char *address, int *time_to_live);
