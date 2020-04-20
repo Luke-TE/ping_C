@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <sys/socket.h>
@@ -13,6 +14,10 @@
 #include <stdbool.h>
 #include <string.h>
 
+#define INITIAL_SEQ_ID 1
+#define PING_DELAY 1
+#define NO_COMM_FLAGS 0
+
 struct echo_status {
     bool sent;
     bool received;
@@ -20,9 +25,10 @@ struct echo_status {
 
 void icmp_convert_to_ip(char *address);
 struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq);
+void icmp_skt_addr_init(const char *address, struct sockaddr_in *ping_address);
 void icmp_time_delay(int seconds);
 void icmp_ping(char *address);
-void icmp_fill_packet(struct icmphdr *packet, int seq);
+void icmp_set_echo_hdr(struct icmphdr *packet, int seq);
 
 _Noreturn void icmp_echo_loop(char *address);
 

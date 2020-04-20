@@ -6,19 +6,21 @@ void icmp_ping(char *address) {
 }
 
 _Noreturn void icmp_echo_loop(char *address) {
-    int skt = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-    int seq_id = 1;
+    int seq_id = INITIAL_SEQ_ID;
     int packets_sent = 0, packets_received = 0;
+    double packet_loss;
 
-    // TODO factor this out
+    // Initialize socket
+    int skt = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+
+    // Initialize address to ping
     struct sockaddr_in ping_address;
-    ping_address.sin_addr.s_addr = inet_addr(address);
-    ping_address.sin_port = htons(0);
-    ping_address.sin_family = AF_INET;
+    icmp_skt_addr_init(address, &ping_address);
 
     struct echo_status current_status;
 
-    while (1) {
+    while (true) {
+        // Ping the address
         current_status = icmp_send_echo(skt, &ping_address, seq_id);
 
         if (current_status.sent) {
@@ -29,43 +31,79 @@ _Noreturn void icmp_echo_loop(char *address) {
             packets_received++;
         }
 
+        // Calculate packet loss if possible
         if (packets_sent > 0) {
-            printf("packets sent: %d\n", packets_sent);
-            printf("packets received: %d\n", packets_received);
-            printf("packet loss: %f\n", (double) (packets_sent - packets_received) * 100 / packets_sent);
+            packet_loss = (double) (packets_sent - packets_received) * 100 / packets_sent;
         }
 
-        icmp_time_delay(3);
+        // Print details of echo request
+        printf("Packets sent: %d, ", packets_sent);
+        printf("Packets received: %d, ", packets_received);
+        printf("Packet loss: %f, ", packet_loss);
+        printf("\n\n");
+
+        icmp_time_delay(PING_DELAY);
         seq_id++;
     }
 }
 
 struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq) {
     bool sent = false, received = false;
-    struct icmphdr packet;
-    icmp_fill_packet(&packet, seq);
-    struct sockaddr_in return_address;
+
+    // Set the ICMP request's header to be a echo request
+    struct icmphdr echo_packet;
+    icmp_set_echo_hdr(&echo_packet, seq);
 
 
-    if (sendto(skt, &packet, sizeof(packet), 0, (const struct sockaddr *) ping_address, sizeof(*ping_address)) <= 0) {
-        printf("sending failed\n");
+    printf("Sending request... ");
+    if (sendto(skt, &echo_packet, sizeof(echo_packet), NO_COMM_FLAGS, (const struct sockaddr *) ping_address,
+               sizeof(*ping_address)) <= 0) {
+        printf("Sending request failed. \n");
     } else {
-        printf("sending successful\n");
+        printf("Sending request successful. \n");
         sent = true;
     }
 
-    int return_address_len = sizeof(return_address);
-    if (recvfrom(skt, &packet, sizeof(packet), 0, (struct sockaddr*) &return_address, (socklen_t *) &return_address_len) <= 0) {
-        printf("receiving failed\n");
+    // Setting up return address variable for reception
+    struct sockaddr_in received_address;
+    int return_address_len = sizeof(received_address);
+
+    printf("Receiving request... ");
+    if (recvfrom(skt, &echo_packet, sizeof(echo_packet), NO_COMM_FLAGS, (struct sockaddr *) &received_address,
+                 (socklen_t *) &return_address_len) <= 0) {
+        printf("Receiving reply failed. \n");
     } else {
-        printf("receiving successful\n");
+        printf("Receiving reply successful. \n");
+
+        printf("%d %d %d %d\n", echo_packet.type, echo_packet.code, echo_packet.un.echo.sequence, echo_packet.un.echo.id);
+
+        char *address_pinged = inet_ntoa((struct in_addr) {received_address.sin_addr.s_addr});
+        printf("Return address was %s:%d\n", address_pinged, received_address.sin_port);
         received = true;
     }
 
-    return (struct echo_status){sent, received};
+
+    printf("\n");
+
+    return (struct echo_status) {sent, received};
 }
 
-void icmp_fill_packet(struct icmphdr *packet, int seq) {
+void icmp_convert_to_ip(char *address) {
+    printf("converting to ip\n");
+    // TODO Convert Hostnames to IP addresses
+}
+
+void icmp_skt_addr_init(const char *address, struct sockaddr_in *ping_address) {
+    ping_address->sin_addr.s_addr = inet_addr(address);
+
+    // TODO Set the port to ping
+    ping_address->sin_port = htons(0);
+
+    // Initialize IPv4 address
+    ping_address->sin_family = AF_INET;
+}
+
+void icmp_set_echo_hdr(struct icmphdr *packet, int seq) {
     // ICMP Echo Request
     packet->type = ICMP_ECHO;
     packet->code = 0;
@@ -81,12 +119,9 @@ void icmp_fill_packet(struct icmphdr *packet, int seq) {
     packet->checksum = ip_checksum(packet, sizeof(*packet));
 }
 
-void icmp_convert_to_ip(char *address) {
-    printf("converting to ip\n");
-    // TODO Convert Hostnames to IP addresses
-}
-
 void icmp_time_delay(int seconds) {
     time_t stop_time = time(0) + seconds;
+
+    // Busy wait until time has passed
     while (time(0) < stop_time);
 }
