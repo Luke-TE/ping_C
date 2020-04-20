@@ -51,6 +51,7 @@ _Noreturn void icmp_echo_loop(char *address) {
 
 struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq) {
     bool sent = false, received = false;
+    struct timespec rtt_start, rtt_end;
 
     // Set the ICMP request's header to be a echo request
     struct icmphdr echo_req_packet;
@@ -60,6 +61,7 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
 
 
     printf("Sending request... ");
+    clock_gettime(CLOCK_MONOTONIC_RAW, &rtt_start);
     if (sendto(skt, &echo_req_packet, sizeof(echo_req_packet), NO_COMM_FLAGS, (const struct sockaddr *) ping_address,
                sizeof(*ping_address)) <= 0) {
         printf("Sending request failed. \n");
@@ -73,9 +75,10 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
     int return_address_len = sizeof(received_address);
 
     printf("Receiving request... ");
-    if (recvfrom(skt, &echo_reply_packet, sizeof(echo_reply_packet), NO_COMM_FLAGS,
-                 (struct sockaddr *) &received_address,
-                 (socklen_t *) &return_address_len) <= 0) {
+    ssize_t num_bytes_recv = recvfrom(skt, &echo_reply_packet, sizeof(echo_reply_packet), NO_COMM_FLAGS,
+                                      (struct sockaddr *) &received_address, (socklen_t *) &return_address_len);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &rtt_end);
+    if (num_bytes_recv <= 0) {
         printf("Receiving reply failed. \n");
     } else {
         // Interpret the response type
@@ -98,8 +101,13 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
         printf("Return address was %s:%d\n", address_pinged, received_address.sin_port);
     }
 
-    printf("\n");
+    // Calculate and display round trip time
+    long double rtt = (double) (rtt_end.tv_sec - rtt_start.tv_sec) * 1000 +
+                      (double) (rtt_end.tv_nsec - rtt_start.tv_nsec) / 1000000;
+    printf("Round-trip time %.2Lf ms \n", rtt);
 
+
+    printf("\n");
     return (struct echo_status) {sent, received};
 }
 
