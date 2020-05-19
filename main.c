@@ -2,17 +2,25 @@
 #include <unistd.h>
 #include "icmp.h"
 
-int main(int argc, char **argv) {
-    char *address = argv[1];
+#define ERROR -1
 
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        perror("Missing address argument.");
+        exit(ERROR);
+    }
+
+    struct ping_params params;
+    params.address = argv[1];
+    params.time_to_live = 0;
+
+    if (argc >= 3) {
+        params.time_to_live = atoi(argv[2]);
+    }
+
+    // Only root user can echo
     if (getuid() == 0) {
-        // If TTL arg provided
-        if (argc >= 3) {
-            int time_to_live = atoi(argv[2]);
-            icmp_ping(address, &time_to_live);
-        } else {
-            icmp_ping(address, NULL);
-        }
+        icmp_ping(params);
     } else {
         perror("Ping requires sudo!\n");
     }

@@ -21,20 +21,25 @@
 #define NS_IN_MS 1000000
 #define MS_IN_S 1000
 
+struct ping_params {
+    char *address;
+    int time_to_live;
+};
+
 struct echo_status {
     bool sent;
     bool received;
 };
 
 struct echo_reply {
-    struct ip ip_layer;
-    struct icmphdr icmp_layer;
+    struct ip ip_header;
+    struct icmphdr icmp_header;
 };
 
 struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int seq_id);
 void icmp_skt_addr_init(const char *address, struct sockaddr_in *ping_address);
-void icmp_ping(char *hostname, int *time_to_live);
-_Noreturn void icmp_echo_loop(char *address, int *time_to_live);
+void icmp_ping(struct ping_params params);
+_Noreturn void icmp_echo_loop(struct ping_params params);
 
 #endif //PING_ICMP_H
 

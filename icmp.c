@@ -1,19 +1,26 @@
 #include "icmp.h"
 
 void handle_dest_unreachable(int code);
+
 void handle_time_exceeded(int code);
+
 char *try_convert_to_ip(char *hostname);
+
 void set_echo_hdr(struct icmphdr *packet, int seq);
+
 void time_delay(int seconds);
-bool handle_reception(struct echo_reply *echo_reply_packet, bool *received);
+
+bool handle_reception(struct echo_reply *echo_reply_packet);
 
 
-void icmp_ping(char *hostname, int *time_to_live) {
-    char *ip_addr = try_convert_to_ip(hostname);
-    icmp_echo_loop(ip_addr, time_to_live);
+void print_rtt(struct timespec rtt_start, struct timespec rtt_end);
+
+void icmp_ping(struct ping_params params) {
+    params.address = try_convert_to_ip(params.address);
+    icmp_echo_loop(params);
 }
 
-_Noreturn void icmp_echo_loop(char *address, int *time_to_live) {
+_Noreturn void icmp_echo_loop(struct ping_params params) {
     int seq_id = INITIAL_SEQ_ID;
     int packets_sent = 0, packets_received = 0;
     double packet_loss;
@@ -22,14 +29,14 @@ _Noreturn void icmp_echo_loop(char *address, int *time_to_live) {
     int skt = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 
     // Set TTL, if provided
-    if (time_to_live != NULL) {
-        printf("Time To Live set to %d. \n", *time_to_live);
-        setsockopt(skt, IPPROTO_IP, IP_TTL, time_to_live, sizeof(*time_to_live));
+    if (params.time_to_live != 0) {
+        printf("Time To Live set to %d. \n", params.time_to_live);
+        setsockopt(skt, IPPROTO_IP, IP_TTL, &params.time_to_live, sizeof(int));
     }
 
     // Initialize address to ping
     struct sockaddr_in ping_address;
-    icmp_skt_addr_init(address, &ping_address);
+    icmp_skt_addr_init(params.address, &ping_address);
 
     struct echo_status current_status;
 
@@ -96,7 +103,7 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
     if (num_bytes_recv <= 0) {
         printf("Receiving reply failed. \n");
     } else {
-        received = handle_reception(&echo_reply_packet, &received);
+        received = handle_reception(&echo_reply_packet);
         printf("\n");
 
         // Get actual IP address communicated with
@@ -104,38 +111,37 @@ struct echo_status icmp_send_echo(int skt, struct sockaddr_in *ping_address, int
         printf("Return address was %s:%d\n", address_pinged, received_address.sin_port);
     }
 
-
-    // Calculate and display round trip time
-    long double rtt = (double) (rtt_end.tv_sec - rtt_start.tv_sec) * MS_IN_S +
-                      (double) (rtt_end.tv_nsec - rtt_start.tv_nsec) / NS_IN_MS;
-    printf("Round-trip time %.2Lf ms \n", rtt);
-
-
+    print_rtt(rtt_start, rtt_end);
     printf("\n");
     return (struct echo_status) {sent, received};
 }
 
-bool handle_reception(struct echo_reply *echo_reply_packet, bool *received) {
+void print_rtt(struct timespec rtt_start, struct timespec rtt_end) {
+    // Calculate and display round trip time
+    long double rtt = (double) ((rtt_end).tv_sec - (rtt_start).tv_sec) * MS_IN_S +
+                      (double) ((rtt_end).tv_nsec - (rtt_start).tv_nsec) / NS_IN_MS;
+    printf("Round-trip time %.2Lf ms \n", rtt);
+}
+
+bool handle_reception(struct echo_reply *echo_reply_packet) {
     // Reception of echo successful, interpret the response type
-    switch (echo_reply_packet->icmp_layer.type) {
-        case ICMP_ECHOREPLY: {
-            printf("Receiving reply successful. ");
-            *received = true;
-        }
-            break;
+    switch (echo_reply_packet->icmp_header.type) {
+        case ICMP_ECHOREPLY:
+            printf("Receiving reply successful. \n");
+            return true;
         case ICMP_DEST_UNREACH:
             printf("Destination unreachable. ");
-            handle_dest_unreachable((*echo_reply_packet).icmp_layer.code);
+            handle_dest_unreachable((*echo_reply_packet).icmp_header.code);
             break;
         case ICMP_TIME_EXCEEDED:
             printf("Time exceeded. ");
-            handle_time_exceeded((*echo_reply_packet).icmp_layer.code);
+            handle_time_exceeded((*echo_reply_packet).icmp_header.code);
             break;
         default:
-            printf("Error Message with type %d, code %d. ", (*echo_reply_packet).icmp_layer.type,
-                   (*echo_reply_packet).icmp_layer.code);
+            printf("Error Message with type %d, code %d. \n", (*echo_reply_packet).icmp_header.type,
+                   (*echo_reply_packet).icmp_header.code);
     }
-    return received;
+    return false;
 }
 
 char *try_convert_to_ip(char *hostname) {
@@ -184,19 +190,30 @@ void time_delay(int seconds) {
 
 void handle_dest_unreachable(int code) {
     // Print type of destination unreachable error
-    switch (code) {
-        case ICMP_NET_UNREACH:
-            printf("Network was unreachable.\n");
-            break;
-        case ICMP_HOST_UNREACH:
-            printf("Host was unreachable.\n");
-            break;
-        case ICMP_PROT_UNREACH:
-            printf("Protocol was unreachable.\n");
-            break;
-        default:
-            printf("Code %d occurred.\n", code);
+    int dest_unreachable_errors = 16;
+    char *error_messages[] = {"Network was unreachable.",
+                              "Host was unreachable.",
+                              "Protocol was unreachable.",
+                              "Port was unreachable.",
+                              "Fragmentation required.",
+                              "Source route failed.",
+                              "Unknown destination network.",
+                              "Unknown destination host.",
+                              "Source host isolated.",
+                              "Network prohibited by administrator.",
+                              "Host prohibited by administrator.",
+                              "Network was unreachable for ToS.",
+                              "Host was unreachable for ToS.",
+                              "Communication prohibited by administrator.",
+                              "Host precedence violation.",
+                              "Precedence cutoff in effect."};
+
+    if (code >= 0 && code < dest_unreachable_errors) {
+        printf("%s\n", error_messages[code]);
+    } else {
+        printf("Unknown code %d occurred.\n", code);
     }
+
 }
 
 void handle_time_exceeded(int code) {
@@ -206,9 +223,9 @@ void handle_time_exceeded(int code) {
             printf("TTL count exceeded.\n");
             break;
         case ICMP_EXC_FRAGTIME:
-            printf("Fragment Reass time exceeded.\n");
+            printf("Fragment Reassembly time exceeded.\n");
             break;
         default:
-            printf("Code %d occurred.\n", code);
+            printf("Unknown code %d occurred.\n", code);
     }
 }
